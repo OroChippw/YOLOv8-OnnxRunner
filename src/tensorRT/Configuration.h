@@ -9,8 +9,6 @@ struct Configuration
     float confThreshold = 0.9f;
     float nmsThreshold = 0.5f;
 
-    bool doVisualize = false;
-    bool cudaEnable;
     std::string ModelPath = "models/yolov8-detect.onnx";
     std::string SavePath = "output";
 };

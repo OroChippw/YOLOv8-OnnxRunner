@@ -13,10 +13,15 @@ private:
     const int reg_max = 16;
     const int input_width = 640;
     const int input_height = 640;
+    float resizeScales; //letterbox scale
 
-    // Use OnnxRuntime
     Ort::Env env;
 	Ort::SessionOptions session_options;
+    Ort::Session* session;
+    bool cudaEnable;
+    Ort::RunOptions options;
+    std::vector<const char*> inputNodeNames;
+    std::vector<const char*> outputNodeNames;
 
 private:
     inline void softmax();
@@ -24,11 +29,11 @@ private:
 protected:
     cv::Mat Preprocess(cv::Mat srcImage , int *new_h , int *new_w , int *pad_w , int *pad_h);
 
-    cv::Mat Proprocess();
+    cv::Mat Postprocess();
 
 public:
     explicit YOLOv8OnnxRunner(Configuration cfg); 
-    ~YOLOv8OnnxRunner() {};
+    ~YOLOv8OnnxRunner();
 
     void InitOrtEnv(Configuration cfg);
 

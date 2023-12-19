@@ -8,14 +8,25 @@ YOLOv8OnnxRunner::YOLOv8OnnxRunner(Configuration cfg) :
     {
         this->confThreshold = cfg.confThreshold;
         this->nmsThreshold = cfg.nmsThreshold;
-        
-        InitOrtEnv(cfg);
+        #ifdef USE_CUDA
+            // GPU FP32 inference
+            cfg.cudaEnable = true
+        # elif
+            // CPU inference
+            cfg.cudaEnable = false
+        #endif
+            InitOrtEnv(cfg);
     }
     catch(const std::exception& e)
     {
         std::cerr << "[ERROR] : " << e.what() << '\n';
     }
     
+}
+
+YOLOv8OnnxRunner::~YOLOv8OnnxRunner()
+{
+    delete session;
 }
 
 void YOLOv8OnnxRunner::setConfThreshold(float threshold)
@@ -25,7 +36,7 @@ void YOLOv8OnnxRunner::setConfThreshold(float threshold)
 
 void YOLOv8OnnxRunner::setNMSThreshold(float threshold)
 {
-    this->nmsThreshold = threshold
+    this->nmsThreshold = threshold;
 }
 
 void YOLOv8OnnxRunner::softmax()
@@ -36,13 +47,38 @@ void YOLOv8OnnxRunner::softmax()
 void YOLOv8OnnxRunner::InitOrtEnv(Configuration cfg)
 {
     env = Ort::Env(ORT_LOGGING_LEVEL_WARNING, "YOLOv8Model");
+    if (cfg.cudaEnable)
+    {
+        OrtCUDAProviderOptions cudaOption;
+        cuda_options.device_id = 0;
+        session_options.AppendExecutionProvider_CUDA(cudaOption);
+    }
+
 	session_options = Ort::SessionOptions();
 	session_options.SetInterOpNumThreads(cfg.num_thread);
-
-    // 设置图像优化级别
 	session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
 
     std::wstring model_path = std::wstring(cfg.ModelPath.begin() , cfg.ModelPath.end());
+    session = new Ort::Session(env , model_path.c_str() , session_options);
+
+    Ort::AllocatorWithDefaultOptions allocator;
+    size_t inputNodesNum = session->GetInputCount();
+    for (size_t i = 0; i < inputNodesNum; i++)
+    {
+        Ort::AllocatedStringPtr input_node_name = session->GetInputNameAllocated(i, allocator);
+        char* temp_buf = new char[50];
+        strcpy(temp_buf, input_node_name.get());
+        inputNodeNames.push_back(temp_buf);
+    }
+    
+    size_t OutputNodesNum = session->GetOutputCount();
+    for (size_t i = 0; i < OutputNodesNum; i++)
+    {
+        Ort::AllocatedStringPtr output_node_name = session->GetOutputNameAllocated(i, allocator);
+        char* temp_buf = new char[10];
+        strcpy(temp_buf, output_node_name.get());
+        outputNodeNames.push_back(temp_buf);
+    }
 
 }
 

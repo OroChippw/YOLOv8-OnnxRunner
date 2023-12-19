@@ -39,3 +39,6 @@ build/
 
 # models
 models/
+
+# .vscode
+.vscode/

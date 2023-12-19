@@ -3,11 +3,10 @@
     # Last Change : 2023.12.19
 */
 #include <iostream>
-#include <filesystem>
 #include <opencv2/opencv.hpp>
 
 #include "Configuration.h"
-#include "YOLOv8OnnxRunner.h"
+#include "YOLOv8TensorRTRunner.h"
 
 void Print_Usage(int argc, char ** argv, const Configuration & cfg)
 {
@@ -19,15 +18,14 @@ void Print_Usage(int argc, char ** argv, const Configuration & cfg)
     fprintf(stderr, "                        model path (default: %s)\n", cfg.ModelPath.c_str());
     fprintf(stderr, "  -conf T, --conf-threshold T     detection confidence threshold (default: %.2f)\n", cfg.confThreshold);
     fprintf(stderr, "  -nms T, --nms-threshold T     non maximum suppression threshold (default: %.2f)\n", cfg.nmsThreshold);
-    fprintf(stderr, "  -v , --visual     visualiztion prediction result (default: %d)\n", cfg.doVisualize);
-    fprintf(stderr, "  -img FNAME, --image-dir FNAME\n");
-    fprintf(stderr, "                        input file dir \n");
+    fprintf(stderr, "  -img FNAME, --image-path FNAME\n");
+    fprintf(stderr, "                        input file \n");
     fprintf(stderr, "  -save FNAME, --save-path FNAME\n");
     fprintf(stderr, "                        output file (default: %s)\n", cfg.SavePath.c_str());
     fprintf(stderr, "\n");
 }
 
-bool Params_Parse(int argc , char ** argv , Configuration & cfg , std::filesystem::path & image_dir)
+bool Params_Parse(int argc , char ** argv , Configuration & cfg , std::string & image_path)
 {
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -39,15 +37,12 @@ bool Params_Parse(int argc , char ** argv , Configuration & cfg , std::filesyste
         } else if (arg == "-nms" || arg == "--nms-threshold")
         {
             cfg.nmsThreshold = std::stof(argv[++i]);
-        } else if (arg == "-img" || arg == "--image-dir")
+        } else if (arg == "-img" || arg == "--image-path")
         {
-            image_dir = argv[++i];
+            image_path = argv[++i];
         } else if (arg == "-save" || arg == "--save-path")
         {
             cfg.SavePath = std::stof(argv[++i]);
-        } else if (arg == "-v" || arg == "--visual")
-        {
-            cfg.doVisualize = true;
         } else if (arg == "-h" || arg == "--help")
         {
             Print_Usage(argc , argv , cfg);
@@ -66,28 +61,19 @@ bool Params_Parse(int argc , char ** argv , Configuration & cfg , std::filesyste
 
 int main(int argc , char *argv[])
 {
-    std::filesystem::path image_dir;
+    std::string image_path;
     Configuration cfg;
 
-    if (!Params_Parse(argc , argv , cfg , image_dir))
+    if (!Params_Parse(argc , argv , cfg , image_path))
     {
         return EXIT_FAILURE;
     }
 
-    YOLOv8OnnxRunner Detector(cfg);
+    YOLOv8TensorRTRunner Detector(cfg);
 
-    for (auto& i : std::filesystem::directory_iterator(image_dir))
-    {
-        if (i.path().extension() == ".jpg" || i.path().extension() == ".png" || i.path().extension() == ".jpeg")
-        {
-            cv::Mat srcImage = cv::imread(i.path().string(), -1);
-            auto result = Detector.InferenceSingleImage(srcImage);
-            if (cfg.doVisualize)
-            {
-                Detector.VisualizationPredicition();
-            }
-        }
-    }
+    cv::Mat srcImage = cv::imread(image_path, -1);
 
+    Detector.InferenceSingleImage(srcImage);
+    
     return EXIT_SUCCESS;
 }
