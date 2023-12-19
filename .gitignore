@@ -30,3 +30,12 @@
 *.exe
 *.out
 *.app
+
+# third party
+third_party/
+
+# build
+build/
+
+# models
+models/
