@@ -1,7 +1,8 @@
 /*
     # Authore : OroChippw
-    # Last Change : 2023.12.19
+    # Last Change : 2023.12.20
 */
+#include <chrono>
 #include <iostream>
 #include <filesystem>
 #include <opencv2/opencv.hpp>
@@ -20,6 +21,7 @@ void Print_Usage(int argc, char ** argv, const Configuration & cfg)
     fprintf(stderr, "  -conf T, --conf-threshold T     detection confidence threshold (default: %.2f)\n", cfg.confThreshold);
     fprintf(stderr, "  -nms T, --nms-threshold T     non maximum suppression threshold (default: %.2f)\n", cfg.nmsThreshold);
     fprintf(stderr, "  -v , --visual     visualiztion prediction result (default: %d)\n", cfg.doVisualize);
+    fprintf(stderr, "  --cuda     using GPUs for inference (default: %d)\n", cfg.cudaEnable);
     fprintf(stderr, "  -img FNAME, --image-dir FNAME\n");
     fprintf(stderr, "                        input file dir \n");
     fprintf(stderr, "  -save FNAME, --save-path FNAME\n");
@@ -48,6 +50,9 @@ bool Params_Parse(int argc , char ** argv , Configuration & cfg , std::filesyste
         } else if (arg == "-v" || arg == "--visual")
         {
             cfg.doVisualize = true;
+        } else if (arg == "--cuda")
+        {
+            cfg.cudaEnable = true;
         } else if (arg == "-h" || arg == "--help")
         {
             Print_Usage(argc , argv , cfg);
@@ -58,7 +63,6 @@ bool Params_Parse(int argc , char ** argv , Configuration & cfg , std::filesyste
             Print_Usage(argc , argv , cfg);
             return EXIT_FAILURE;
         }
-
     }
     return EXIT_SUCCESS;
 }
@@ -84,7 +88,12 @@ int main(int argc , char *argv[])
             auto result = Detector.InferenceSingleImage(srcImage);
             if (cfg.doVisualize)
             {
-                Detector.VisualizationPredicition();
+                cv::Mat visualImage = Detector.VisualizationPredicition(srcImage , result);
+                
+                std::cout << "[OPERATION] Press any key to exit" << std::endl;
+                cv::imshow("YOLOv8Detect Result" , visualImage);
+                cv::waitKey(0);
+                cv::destroyAllWindows();
             }
         }
     }

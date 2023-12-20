@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.0)
 project(YOLOv8-OnnxRunner)
 
+# -------------- Support C++17 for using filesystem  ------------------#
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -15,13 +16,14 @@ message(STATUS "Root Path: ${CMAKE_SOURCE_DIR}")
 include(cmake/platform.cmake)  # checking platform
 
 # link third-party library onnxruntime-win-x64-1.14.1 and opencv4
+# -------------- ONNXRUNTIME  ------------------#
 set(ONNXRUNTIME_DIR  ${CMAKE_SOURCE_DIR}/third_party/onnxruntime-win-x64-1.14.1)
 message(STATUS "ONNXRUNTIME_DIR Path: ${ONNXRUNTIME_DIR}")
-
 include_directories(${ONNXRUNTIME_DIR}/include)
 link_directories("${ONNXRUNTIME_DIR}/lib")
 set(ONNXRUNTIME_LIB onnxruntime onnxruntime_providers_shared)
 
+# -------------- OpenCV  ------------------#
 set(OPENCV_DIR  ${CMAKE_SOURCE_DIR}/third_party/opencv480/build)
 message(STATUS "OPENCV_DIR Path: ${OPENCV_DIR}")
 include_directories(${OpenCV_INCLUDE_DIRS})

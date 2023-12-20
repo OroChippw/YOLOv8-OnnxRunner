@@ -1,27 +1,22 @@
-// #include "Configuration.h"
+#pragma once
+
+#include <chrono>
+
+#include "Configuration.h"
 #include "YOLOv8OnnxRunner.h"
 
-YOLOv8OnnxRunner::YOLOv8OnnxRunner(Configuration cfg) : 
-    num_threads(cfg.num_thread)
+YOLOv8OnnxRunner::YOLOv8OnnxRunner(Configuration cfg)
 {
     try
     {
         this->confThreshold = cfg.confThreshold;
         this->nmsThreshold = cfg.nmsThreshold;
-        #ifdef USE_CUDA
-            // GPU FP32 inference
-            cfg.cudaEnable = true
-        # elif
-            // CPU inference
-            cfg.cudaEnable = false
-        #endif
-            InitOrtEnv(cfg);
+        InitOrtEnv(cfg);
     }
     catch(const std::exception& e)
     {
         std::cerr << "[ERROR] : " << e.what() << '\n';
     }
-    
 }
 
 YOLOv8OnnxRunner::~YOLOv8OnnxRunner()
@@ -39,9 +34,34 @@ void YOLOv8OnnxRunner::setNMSThreshold(float threshold)
     this->nmsThreshold = threshold;
 }
 
-void YOLOv8OnnxRunner::softmax()
+void YOLOv8OnnxRunner::Softmax()
 {
 
+}
+
+void YOLOv8OnnxRunner::Normalize(cv::Mat image)
+{
+    int imageWidth = image.cols;
+    int imageHeight = image.rows;
+    int imageChannel = image.channels();
+    this->input_image.resize(imageWidth * imageHeight * imageChannel);
+
+    for (int c = 0 ; c < imageChannel ; c++)
+    {
+        for (int h = 0 ; h < imageHeight ; h++)
+        {
+            for (int w = 0 ; w < imageWidth ; w++)
+            {
+                this->input_image[c * imageWidth * imageHeight + h * imageWidth + w] = \
+                    image.at<cv::Vec3b>(h , w)[c] / 255.0f;
+            }
+        }
+    }
+}
+
+void YOLOv8OnnxRunner::NonMaximumSuppression()
+{
+    // sort();
 }
 
 void YOLOv8OnnxRunner::InitOrtEnv(Configuration cfg)
@@ -50,7 +70,7 @@ void YOLOv8OnnxRunner::InitOrtEnv(Configuration cfg)
     if (cfg.cudaEnable)
     {
         OrtCUDAProviderOptions cudaOption;
-        cuda_options.device_id = 0;
+        cudaOption.device_id = 0;
         session_options.AppendExecutionProvider_CUDA(cudaOption);
     }
 
@@ -65,73 +85,161 @@ void YOLOv8OnnxRunner::InitOrtEnv(Configuration cfg)
     size_t inputNodesNum = session->GetInputCount();
     for (size_t i = 0; i < inputNodesNum; i++)
     {
-        Ort::AllocatedStringPtr input_node_name = session->GetInputNameAllocated(i, allocator);
-        char* temp_buf = new char[50];
-        strcpy(temp_buf, input_node_name.get());
-        inputNodeNames.push_back(temp_buf);
+        inputNodeNames.push_back(session->GetInputNameAllocated(i , allocator).get());
+        inputNodeDims.push_back(session->GetInputTypeInfo(i).GetTensorTypeAndShapeInfo().GetShape());
     }
     
     size_t OutputNodesNum = session->GetOutputCount();
     for (size_t i = 0; i < OutputNodesNum; i++)
     {
-        Ort::AllocatedStringPtr output_node_name = session->GetOutputNameAllocated(i, allocator);
-        char* temp_buf = new char[10];
-        strcpy(temp_buf, output_node_name.get());
-        outputNodeNames.push_back(temp_buf);
+        outputNodeNames.push_back(session->GetOutputNameAllocated(i , allocator).get());
+        outputNodeDims.push_back(session->GetOutputTypeInfo(i).GetTensorTypeAndShapeInfo().GetShape());
     }
 
+    this->input_width = inputNodeDims[0][2];
+    this->input_height = inputNodeDims[0][3];
+
+    std::cout << "[INFO] Build Session successfully." << std::endl;
 }
 
-cv::Mat YOLOv8OnnxRunner::Preprocess(cv::Mat srcImage , int *new_h , int *new_w , int *pad_w , int *pad_h)
+void YOLOv8OnnxRunner::Preprocess(cv::Mat srcImage , cv::Mat& processImage)
 {   
     int src_width = srcImage.cols , src_height = srcImage.rows;
-    *new_w = this->input_width;
-    *new_h = this->input_height;
-    cv::Mat resizeImage;
 
-    if (src_height != src_width)
+    if (srcImage.channels() == 3)
     {
-        float hw_scale = (float) src_height / src_width;
-        if (hw_scale > 1)
-        {
-            *new_h = this->input_height;
-            *new_w = int(this->input_width / hw_scale);
-            cv::resize(srcImage , resizeImage , cv::Size(*new_w , *new_h) , cv::INTER_AREA);
-            *pad_w = int((this->input_width - *new_w) / 2);
-            cv::copyMakeBorder(resizeImage , resizeImage , 0 , 0 , *pad_w , *pad_w , cv::BorderTypes::BORDER_CONSTANT, cv::Scalar(0, 0, 0))
-        } else 
-        {
-            *new_h = int(this->input_height * hw_scale);
-            *new_w = this->input_width;
-            cv::resize(srcImage , resizeImage , cv::Size(*new_w , *new_h) , cv::INTER_AREA);
-            *pad_h = int((this->input_height - *new_h) / 2);
-            cv::copyMakeBorder(resizeImage , resizeImage , *pad_h , *pad_h , 0 , 0 , cv::BorderTypes::BORDER_CONSTANT, cv::Scalar(0, 0, 0))
-        }
-    } else
+        processImage = srcImage.clone();
+        cv::cvtColor(processImage , processImage , cv::COLOR_BGR2RGB);
+    } else 
     {
-        cv::resize(srcImage , resizeImage , cv::Size(*new_w , *new_h) , cv::INTER_AREA);
+        cv::cvtColor(srcImage , processImage , cv::COLOR_GRAY2RGB);
     }
 
-    return resizeImage;
+    if (src_width >= src_height)
+    {
+        resizeScales = src_width / (float)this->input_width;
+        cv::resize(processImage, processImage, cv::Size(this->input_width, int(src_height / resizeScales)));
+    } else
+    {
+        resizeScales = src_height / (float)this->input_height;
+        cv::resize(processImage , processImage , cv::Size(int(src_width / resizeScales) , this->input_height));
+    }
+
+    cv::Mat tempImage = cv::Mat::zeros(this->input_width , this->input_height , CV_8UC3);
+    processImage.copyTo(tempImage(cv::Rect(0 , 0 , processImage.cols , processImage.rows)));
+    processImage = tempImage;
+
+    Normalize(processImage);
 }
 
-cv::Mat YOLOv8OnnxRunner::Proprocess()
-{
-    return cv::Mat();
+void YOLOv8OnnxRunner::Inference(float* result)
+{   
+    Ort::Value input_tensor = Ort::Value::CreateTensor<float>( \
+        memory_info_handler , this->input_image.data() , this->input_image.size() , inputNodeDims[0].data() , inputNodeDims[0].size());
+    
+    std::cout << "[INFO] Inference Start ..." << std::endl;
+    
+    auto time_start = std::chrono::high_resolution_clock::now();
+    auto output_tensor = session->Run(
+        options , inputNodeNames.data() , &input_tensor , 1 , outputNodeNames.data() , outputNodeNames.size());
+    auto time_end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> diff = time_end - time_start;
+
+    std::cout << "[INFO] Inference Finish ..." << std::endl;
+    std::cout << "[INFO] Inference Cost time : " << diff.count() << "s" << std::endl;
+
+    result = output_tensor.front().GetTensorMutableData<float>();
 }
 
-cv::Mat YOLOv8OnnxRunner::InferenceSingleImage(const cv::Mat& srcImage)
+void YOLOv8OnnxRunner::Postprocess(float* output , std::vector<DETECT_RESULT>& result)
 {
+    int strideNum = outputNodeDims[0][1]; // 8400
+    int signalResultNum = outputNodeDims[0][2]; // 84
+    std::vector<int> class_ids;
+    std::vector<float> confidences;
+    std::vector<cv::Rect> boxes;
+    cv::Mat rawData;
+
+    rawData = cv::Mat(strideNum , signalResultNum , CV_32F , output);
+    float* data = (float*)rawData.data;
+
+    for (int i = 0 ; i < strideNum ; ++i)
+    {
+        float* classesScores = data + 4;
+        cv::Mat scores(1 , this->classes.size() , CV_32FC1, classesScores);
+        cv::Point class_id;
+        double maxClassScore;
+        cv::minMaxLoc(scores , 0 , &maxClassScore , 0 , &class_id);
+        if (maxClassScore > this->confThreshold)
+        {
+            confidences.emplace_back(maxClassScore);
+            class_ids.emplace_back(class_id.x);
+            float x = data[0];
+            float y = data[1];
+            float w = data[2];
+            float h = data[3];
+
+            int left = int((x - 0.5 * w) * this->resizeScales);
+            int top = int((y - 0.5 * h) * this->resizeScales);
+
+            int width = int(w * this->resizeScales);
+            int height = int(h * this->resizeScales);
+
+            boxes.emplace_back(cv::Rect(left , top , width , height));
+        }
+        data += signalResultNum;
+    }
+
+    std::vector<int> nmsResult;
+    cv::dnn::NMSBoxes(boxes , confidences , this->confThreshold , this->nmsThreshold , nmsResult);
+
+    for (int i = 0 ; i < nmsResult.size() ; i++)
+    {
+        int idx = nmsResult[i];
+        DETECT_RESULT res;
+        res.classId = class_ids[idx];
+        res.confidence = confidences[idx];
+        res.box = boxes[idx];
+        result.emplace_back(res);
+    }
+}
+
+cv::Mat YOLOv8OnnxRunner::VisualizationPredicition(cv::Mat image , std::vector<DETECT_RESULT> result)
+{
+    for (auto& re : result)
+    {
+        cv::RNG rng(cv::getTickCount());
+        cv::Scalar color(rng.uniform(0 , 256) , rng.uniform(0 , 256) , rng.uniform(0 , 256));
+        cv::rectangle(image , re.box , color , 3);
+        
+        float confidence = float(100 * re.confidence) / 100;
+        std::cout << std::fixed << std::setprecision(2);
+        std::string label = this->classes[re.classId] + " " + \
+            std::to_string(confidence).substr(0 , std::to_string(confidence).size() - 4);
+        
+        cv::rectangle(image , cv::Point(re.box.x , re.box.y - 25) , \
+            cv::Point(re.box.x + label.length() * 15 , re.box.y) , color , cv::FILLED);
+        
+        cv::putText(image , label , cv::Point(re.box.x , re.box.y - 5) , \
+            cv::FONT_HERSHEY_SIMPLEX , 0.75 , cv::Scalar(0,0,0) , 2);
+    }
+
+    return image;
+}
+
+std::vector<DETECT_RESULT> YOLOv8OnnxRunner::InferenceSingleImage(const cv::Mat& srcImage)
+{
+    float* predict;
+    cv::Mat processImage;
+    std::vector<DETECT_RESULT> result;
     int new_w = 0 , new_h = 0 , pad_w = 0 , pad_h = 0;
-    
-    cv::Mat resizeImage = Preprocess(srcImage , &new_w , &new_h , &pad_w , &pad_h);
-    
-    cv::Mat resultImage = Proprocess();
 
-    return resultImage;
+    Preprocess(srcImage , processImage);
+    
+    Inference(predict);
+    
+    Postprocess(predict , result);
+    
+    return result;
 }
 
-void YOLOv8OnnxRunner::VisualizationPredicition()
-{
-
-}
