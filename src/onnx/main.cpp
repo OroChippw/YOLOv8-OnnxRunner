@@ -12,16 +12,19 @@
 
 void Print_Usage(int argc, char ** argv, const Configuration & cfg)
 {
-    fprintf(stderr, "usage: %s [options]\n", argv[0]);
-    fprintf(stderr, "\n");
-    fprintf(stderr, "options:\n");
+    fprintf(stderr, "Usage: %s [options]\n", argv[0]);
+    fprintf(stderr, "Options:\n");
     fprintf(stderr, "  -h, --help            show this help message and exit\n");
     fprintf(stderr, "  -m FNAME, --model-path FNAME\n");
     fprintf(stderr, "                        model path (default: %s)\n", cfg.ModelPath.c_str());
-    fprintf(stderr, "  -conf T, --conf-threshold T     detection confidence threshold (default: %.2f)\n", cfg.confThreshold);
-    fprintf(stderr, "  -nms T, --nms-threshold T     non maximum suppression threshold (default: %.2f)\n", cfg.nmsThreshold);
-    fprintf(stderr, "  -v , --visual     visualiztion prediction result (default: %d)\n", cfg.doVisualize);
-    fprintf(stderr, "  --cuda     using GPUs for inference (default: %d)\n", cfg.cudaEnable);
+    fprintf(stderr, "  -conf T, --conf-threshold T\n");     
+    fprintf(stderr, "                        detection confidence threshold (default: %.2f)\n", cfg.confThreshold);
+    fprintf(stderr, "  -nms T, --nms-threshold T\n");     
+    fprintf(stderr, "                        non maximum suppression threshold (default: %.2f)\n", cfg.iouThreshold);
+    fprintf(stderr, "  -v , --visual\n");     
+    fprintf(stderr, "                        visualiztion prediction result (default: %d)\n", cfg.doVisualize);
+    fprintf(stderr, "  --cuda\n");     
+    fprintf(stderr, "                        using GPUs for inference (default: %d)\n", cfg.cudaEnable);
     fprintf(stderr, "  -img FNAME, --image-dir FNAME\n");
     fprintf(stderr, "                        input file dir \n");
     fprintf(stderr, "  -save FNAME, --save-path FNAME\n");
@@ -40,7 +43,7 @@ bool Params_Parse(int argc , char ** argv , Configuration & cfg , std::filesyste
             cfg.confThreshold = std::stof(argv[++i]);
         } else if (arg == "-nms" || arg == "--nms-threshold")
         {
-            cfg.nmsThreshold = std::stof(argv[++i]);
+            cfg.iouThreshold = std::stof(argv[++i]);
         } else if (arg == "-img" || arg == "--image-dir")
         {
             image_dir = argv[++i];
@@ -73,18 +76,18 @@ int main(int argc , char *argv[])
     std::filesystem::path image_dir;
     Configuration cfg;
 
-    if (!Params_Parse(argc , argv , cfg , image_dir))
+    if (Params_Parse(argc , argv , cfg , image_dir))
     {
         return EXIT_FAILURE;
     }
-
+    
     YOLOv8OnnxRunner Detector(cfg);
 
     for (auto& i : std::filesystem::directory_iterator(image_dir))
     {
         if (i.path().extension() == ".jpg" || i.path().extension() == ".png" || i.path().extension() == ".jpeg")
         {
-            cv::Mat srcImage = cv::imread(i.path().string(), -1);
+            cv::Mat srcImage = cv::imread(i.path().string());
             auto result = Detector.InferenceSingleImage(srcImage);
             if (cfg.doVisualize)
             {

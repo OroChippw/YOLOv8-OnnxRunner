@@ -15,7 +15,6 @@ message(STATUS "Root Path: ${CMAKE_SOURCE_DIR}")
 
 include(cmake/platform.cmake)  # checking platform
 
-# link third-party library onnxruntime-win-x64-1.14.1 and opencv4
 # -------------- ONNXRUNTIME  ------------------#
 set(ONNXRUNTIME_DIR  ${CMAKE_SOURCE_DIR}/third_party/onnxruntime-win-x64-1.14.1)
 message(STATUS "ONNXRUNTIME_DIR Path: ${ONNXRUNTIME_DIR}")
@@ -29,7 +28,7 @@ message(STATUS "OPENCV_DIR Path: ${OPENCV_DIR}")
 include_directories(${OpenCV_INCLUDE_DIRS})
 include_directories(${OPENCV_DIR}/include)
 link_directories("${OPENCV_DIR}/x64/vc16/lib")
-set(OpenCV_LIB opencv_world480)
+set(OpenCV_LIB opencv_world480d)
 
 
 # compile own file
